@@ -3,7 +3,37 @@
 **Disciplina:** Redes Neurais  
 **Dataset:** Microsoft Cats vs Dogs (25.000 imagens)  
 **Modelos:** CNN Personalizada + VGG16 com Transfer Learning  
-**Ambiente de execução recomendado:** Google Colab (GPU T4)
+**Ambiente:** Google Colab (GPU T4)
+
+---
+
+## Resultados Obtidos
+
+### CNN Personalizada — treinamento concluído
+
+| Métrica | Valor |
+|---------|-------|
+| Melhor val_accuracy (epoch 17/20) | **94,87%** |
+| Epochs até convergência | 20 (com ReduceLROnPlateau) |
+| Loss final (validação) | 0,1236 |
+| Parâmetros treináveis | 521.473 (1,99 MB) |
+
+**Evolução por epoch (destaques):**
+
+| Epoch | Treino acc | Val acc | Evento |
+|-------|------------|---------|--------|
+| 1 | 60,4% | 62,3% | — |
+| 6 | 81,9% | 87,0% | salto de generalização |
+| 11 | 90,1% | 92,1% | primeira vez acima de 90% |
+| 15 | 92,9% | 93,7% | LR reduzido → novo máximo |
+| **17** | **93,5%** | **94,9%** | **melhor checkpoint salvo** |
+| 20 | 94,0% | 94,1% | LR reduzido novamente |
+
+O gráfico de acurácia mostra convergência saudável: validação acompanha o treino sem divergência significativa, indicando ausência de overfitting severo.
+
+### VGG16 Fine-tuned — em andamento
+
+Treinamento do VGG16 (2 fases) ainda não concluído. Acurácia esperada: **96–98%** com fine-tuning do block5.
 
 ---
 
@@ -11,31 +41,27 @@
 
 Desenvolver e comparar dois modelos de classificação binária de imagens — identificando se uma foto contém um **gato** ou um **cachorro** — utilizando técnicas de aprendizado profundo com TensorFlow/Keras.
 
-O projeto explora duas abordagens distintas:
-1. **CNN do zero** — arquitetura convolucional projetada e treinada inteiramente a partir dos dados
-2. **Transfer Learning com VGG16** — reutilização de uma rede pré-treinada em 1,2 milhão de imagens (ImageNet), adaptada para a tarefa
-
 ---
 
 ## Estrutura do Projeto
 
 ```
 projeto_classificacao_pet/
-├── colab_classificacao_pets.ipynb   ← Notebook principal (rodar no Google Colab)
+├── colab_classificacao_pets.ipynb   ← Notebook principal (Google Colab)
 ├── main.py                          ← Script de treino local (CPU)
 ├── pre_processamento.py             ← Carregamento e organização do dataset
 ├── modelos.py                       ← Definição das arquiteturas CNN e VGG16
-├── treinamento_e_avaliacao.py       ← Treino, gráficos, métricas, matriz de confusão
-├── app_streamlit.py                 ← Aplicação web interativa para predições
-├── GUIA_COLAB.md                    ← Guia passo a passo de execução no Colab
-├── dados/                           ← Dataset organizado (não versionado no Git)
+├── treinamento_e_avaliacao.py       ← Treino, gráficos, métricas
+├── app_streamlit.py                 ← Aplicação web interativa
+├── GUIA_COLAB.md                    ← Guia passo a passo de execução
+├── dados/                           ← Dataset organizado (não versionado)
 │   ├── treino/
-│   │   ├── gatos/
-│   │   └── cachorros/
+│   │   ├── gatos/       (10.000 imagens)
+│   │   └── cachorros/   (10.000 imagens)
 │   └── validacao/
-│       ├── gatos/
-│       └── cachorros/
-├── modelos/                         ← Modelos treinados .keras (não versionados)
+│       ├── gatos/       (2.500 imagens)
+│       └── cachorros/   (2.500 imagens)
+├── modelos/                         ← Modelos .keras salvos (não versionados)
 └── saidas/                          ← Gráficos e relatórios gerados
 ```
 
@@ -45,162 +71,95 @@ projeto_classificacao_pet/
 
 ### Etapa 1 — Preparação do Dataset
 
-O dataset utilizado é o **Microsoft Cats vs Dogs** (versão original do desafio Kaggle), contendo **12.500 imagens de gatos** e **12.500 imagens de cachorros**, totalizando 25.000 imagens.
+O dataset utilizado é o **Microsoft Cats vs Dogs** (versão original do desafio Kaggle), com 25.000 imagens totais.
 
-A organização segue a divisão:
-- **80% para treino** → 10.000 imagens por classe
-- **20% para validação** → 2.500 imagens por classe
-
-```python
-# pre_processamento.py
-def preparar_dataset_pre_organizado(caminho_base, proporcao_validacao=0.2, caminho_origem=None):
-    # Copia imagens para treino/validacao separando por classe
-    # Usa shutil.copy2 (não move) para preservar o dataset original
-```
+Divisão:
+- **80% treino** → 10.000 imagens por classe
+- **20% validação** → 2.500 imagens por classe
 
 ### Etapa 2 — Data Augmentation
 
-Para aumentar artificialmente a variedade dos dados de treino e reduzir overfitting, aplicamos transformações aleatórias em cada imagem durante o treinamento:
+Transformações aplicadas durante o treino para aumentar artificialmente a diversidade dos dados:
 
 | Técnica | Parâmetro | Efeito |
 |---------|-----------|--------|
-| Rotação | ±30° | Simula fotos tiradas em ângulos diferentes |
-| Deslocamento horizontal/vertical | 20% | Centralização variada do animal |
-| Zoom | 25% | Diferentes distâncias da câmera |
-| Espelhamento horizontal | Ativo | Dobra efetivamente o dataset |
-| Variação de brilho | 75%–125% | Simula condições de iluminação diversas |
-
-```python
-gen_treino_aug = ImageDataGenerator(
-    rescale=1./255,
-    rotation_range=30,
-    zoom_range=0.25,
-    horizontal_flip=True,
-    brightness_range=[0.75, 1.25],
-    ...
-)
-```
+| Rotação | ±30° | Ângulos variados de câmera |
+| Deslocamento | 20% | Centralização variada |
+| Zoom | 25% | Distâncias diferentes |
+| Espelhamento horizontal | Ativo | Dobra o dataset efetivamente |
+| Variação de brilho | 75–125% | Diferentes iluminações |
 
 ### Etapa 3 — Modelo 1: CNN Personalizada
 
-Arquitetura convolucional construída do zero com 4 blocos convolucionais progressivos:
+Arquitetura construída do zero com 4 blocos convolucionais progressivos:
 
 ```
 Entrada (224×224×3)
-    │
-    ├── Conv2D(32) → BatchNorm → MaxPooling
-    ├── Conv2D(64) → BatchNorm → MaxPooling
+    ├── Conv2D(32)  → BatchNorm → MaxPooling
+    ├── Conv2D(64)  → BatchNorm → MaxPooling
     ├── Conv2D(128) → BatchNorm → MaxPooling
     ├── Conv2D(256) → BatchNorm → MaxPooling
-    │
-    ├── GlobalAveragePooling2D      ← substitui Flatten, menos parâmetros
+    ├── GlobalAveragePooling2D
     ├── Dense(512, relu)
-    ├── Dropout(0.5)                ← previne overfitting
-    └── Dense(1, sigmoid)           ← saída binária (0=gato, 1=cachorro)
+    ├── Dropout(0.5)
+    └── Dense(1, sigmoid)
 ```
 
-**Decisões de arquitetura:**
-- **BatchNormalization** após cada convolução: normaliza as ativações, tornando o treinamento mais estável e permitindo learning rates maiores
-- **GlobalAveragePooling2D** em vez de Flatten: reduz drasticamente o número de parâmetros e atua como regularizador implícito
-- **Dropout(0.5)** na camada densa: desativa aleatoriamente 50% dos neurônios por batch, forçando redundância e evitando memorização
+**Decisões técnicas:**
+- **BatchNormalization** após cada convolução: estabiliza o gradiente, permite LR maior
+- **GlobalAveragePooling2D** em vez de Flatten: reduz parâmetros de ~8M para ~520k
+- **Dropout(0.5)**: previne memorização, força generalização
+
+**Resultado real:** 94,87% de acurácia na validação (epoch 17)
 
 ### Etapa 4 — Modelo 2: Transfer Learning com VGG16
 
-A VGG16 é uma rede com 16 camadas treinada no ImageNet. Em vez de treinar do zero, reutilizamos seus pesos (que já reconhecem bordas, texturas, formas) e adaptamos apenas as camadas finais para a nossa tarefa binária.
+VGG16 pré-treinada no ImageNet (1,2M imagens, 1000 classes). Reutiliza features aprendidas e adapta apenas as camadas finais.
 
-O treinamento ocorre em **duas fases**:
+**Fase 1** (base congelada, LR=1e-3, 10 epochs):
+- Treina apenas as camadas densas do topo
+- Aproveita features do ImageNet diretamente
 
-**Fase 1 — Base congelada (10 epochs, LR = 1e-3)**
-```
-VGG16 (pesos ImageNet, CONGELADA)
-    │
-    ├── GlobalAveragePooling2D
-    ├── Dense(256, relu)
-    ├── Dropout(0.5)
-    └── Dense(1, sigmoid)          ← apenas estas camadas são treinadas
-```
-
-**Fase 2 — Fine-tuning do bloco 5 (10 epochs, LR = 1e-5)**
-```
-VGG16
-    ├── block1–block4  (CONGELADOS)
-    └── block5         (DESCONGELADO) ← retreinado com LR muito baixo
-        │
-        └── ... camadas densas
-```
-
-A Fase 2 permite que as últimas camadas convolucionais da VGG16 se especializem em características de cães e gatos, gerando o ganho extra de acurácia (+3–5%).
+**Fase 2** (fine-tuning block5, LR=1e-5, 10 epochs):
+- Descongela as últimas camadas convolucionais
+- LR muito baixo para não destruir os pesos pré-treinados
+- Especializa o modelo em cães e gatos (+3–5% de acurácia)
 
 ### Etapa 5 — Callbacks de Treinamento
 
-Três mecanismos automáticos controlam o treinamento:
+| Callback | Função | Resultado observado |
+|----------|--------|---------------------|
+| `EarlyStopping` (patience=5) | Para se val_loss estagnar | Treino completou 20 epochs sem parar |
+| `ReduceLROnPlateau` (factor=0.5) | Reduz LR quando estagna | Ativou na epoch 14 (1e-3→5e-4) e epoch 20 (5e-4→2.5e-4) |
+| `ModelCheckpoint` | Salva melhor checkpoint | Epoch 17 salvo (94,87%) |
 
-| Callback | Função |
-|----------|--------|
-| `EarlyStopping` | Para o treino quando a val_loss para de melhorar (evita treino desnecessário) |
-| `ReduceLROnPlateau` | Reduz o learning rate pela metade quando o modelo estagna (sai de mínimos locais) |
-| `ModelCheckpoint` | Salva automaticamente apenas o melhor checkpoint (maior val_accuracy) |
-
-### Etapa 6 — Avaliação e Métricas
+### Etapa 6 — Avaliação
 
 Para cada modelo são gerados:
+- Gráficos de acurácia e loss por epoch (treino vs validação)
+- Matriz de confusão
+- Relatório completo: precision, recall, F1-score por classe
 
-- **Gráficos de acurácia e loss** por epoch (treino vs validação)
-- **Matriz de confusão** — mostra quantos gatos/cachorros foram classificados corretamente e onde houve erro
-- **Relatório de classificação completo** — precision, recall e F1-score por classe
+**Nota técnica:** o gerador de validação usa `shuffle=False` para garantir alinhamento correto entre predições e rótulos verdadeiros durante a avaliação.
 
 ### Etapa 7 — Aplicação Web (Streamlit)
 
-Interface interativa para uso do modelo treinado sem necessidade de código:
+Interface para uso do modelo sem código:
 
 ```bash
 streamlit run projeto_classificacao_pet/app_streamlit.py
 ```
 
-Funcionalidades:
-- Upload de qualquer imagem
-- Predição em tempo real pelos dois modelos
-- Exibição da probabilidade de ser gato ou cachorro
-- Comparação visual dos dois resultados
-
 ---
 
-## Como Executar
+## Como Executar no Google Colab
 
-### Opção A — Google Colab (recomendado, GPU gratuita)
+1. Coloque `dataset_colab_full.zip` (25.000 imagens) na raiz do Google Drive
+2. Abra `colab_classificacao_pets.ipynb` no Colab
+3. Ative GPU T4: **Ambiente de execução → Alterar tipo → T4 GPU**
+4. Execute tudo: `Ctrl+F9`
 
-1. Abra o arquivo `colab_classificacao_pets.ipynb` no Google Colab
-2. Vá em **Ambiente de execução → Alterar tipo → T4 GPU**
-3. Execute todas as células com `Ctrl+F9`
-4. O notebook baixa o dataset automaticamente, treina os dois modelos e salva tudo no Google Drive
-
-Consulte o [GUIA_COLAB.md](GUIA_COLAB.md) para detalhes célula a célula.
-
-### Opção B — Execução local (CPU, mais lento)
-
-```bash
-# 1. Instalar dependências
-pip install tensorflow scikit-learn matplotlib seaborn streamlit pillow
-
-# 2. Treinar os modelos
-python projeto_classificacao_pet/main.py
-
-# 3. Iniciar aplicação web
-streamlit run projeto_classificacao_pet/app_streamlit.py
-```
-
-**Requisitos locais:** Python 3.9+, ~4 GB RAM, ~2 GB de espaço em disco
-
----
-
-## Resultados Esperados
-
-| Modelo | Acurácia esperada | Tempo de treino (GPU T4) |
-|--------|-------------------|--------------------------|
-| CNN Personalizada | 85–91% | ~10–15 min |
-| VGG16 Fine-tuned | 92–97% | ~20–25 min |
-
-A diferença de acurácia demonstra o valor do Transfer Learning: ao partir de uma rede já treinada em milhões de imagens, o VGG16 converge mais rápido e atinge maior acurácia mesmo com o mesmo dataset.
+Consulte [GUIA_COLAB.md](GUIA_COLAB.md) para detalhes célula a célula.
 
 ---
 
@@ -208,13 +167,16 @@ A diferença de acurácia demonstra o valor do Transfer Learning: ao partir de u
 
 | Conceito | Onde é aplicado |
 |----------|-----------------|
-| Redes Neurais Convolucionais (CNN) | Extração de features visuais (bordas, texturas, formas) |
-| Transfer Learning | Reutilização dos pesos do VGG16 treinado no ImageNet |
-| Fine-tuning | Desbloqueio parcial da rede pré-treinada na Fase 2 |
-| Data Augmentation | `ImageDataGenerator` com rotação, zoom, flip, brilho |
-| Regularização | BatchNormalization + Dropout + EarlyStopping |
-| Otimização adaptativa | Adam com ReduceLROnPlateau |
-| Avaliação | Matriz de confusão, precision, recall, F1-score |
+| CNN | Extração de features visuais (bordas, texturas, formas) |
+| Transfer Learning | Reutilização dos pesos VGG16 (ImageNet) |
+| Fine-tuning | Desbloqueio parcial da rede na Fase 2 |
+| Data Augmentation | `ImageDataGenerator` com 6 transformações |
+| BatchNormalization | Estabilização do gradiente por camada |
+| Dropout | Regularização nas camadas densas |
+| EarlyStopping | Parada automática quando não há melhora |
+| ReduceLROnPlateau | Ajuste dinâmico do learning rate |
+| ModelCheckpoint | Persistência do melhor estado do modelo |
+| Matriz de Confusão | Análise de erros por classe |
 
 ---
 
